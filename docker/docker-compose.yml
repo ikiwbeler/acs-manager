@@ -1,6 +1,6 @@
 services:
   genieacs-mongo:
-    image: mongo:4.4
+    image: mongo:4.4.18   # WAJIB pin: 4.4.19+ butuh ARMv8.2-A, gagal di ARMv8.0 (Cortex-A53 Orange Pi dll)
     container_name: genieacs-mongo
     restart: unless-stopped
     volumes:
