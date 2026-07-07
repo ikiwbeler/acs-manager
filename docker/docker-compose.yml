@@ -1,0 +1,33 @@
+services:
+  genieacs-mongo:
+    image: mongo:4.4
+    container_name: genieacs-mongo
+    restart: unless-stopped
+    volumes:
+      - genieacs-mongo-data:/data/db
+    networks:
+      - genieacs-net
+
+  genieacs:
+    build: .
+    container_name: genieacs
+    restart: unless-stopped
+    depends_on:
+      - genieacs-mongo
+    environment:
+      GENIEACS_MONGO_HOST: genieacs-mongo
+      GENIEACS_UI_JWT_SECRET: "${GENIEACS_UI_JWT_SECRET}"
+      GENIEACS_MAX_COMMIT_ITERATIONS: "100"
+    ports:
+      - "7547:7547"              # CWMP (TR-069) — perangkat ONU connect ke sini (WAJIB publik)
+      - "127.0.0.1:7557:7557"    # NBI (REST API) — DIKUNCI ke localhost (hanya dashboard/server lokal)
+      - "7567:7567"              # FS (file server firmware) — ONU download firmware (publik)
+      - "127.0.0.1:3000:3000"    # UI bawaan — DIKUNCI ke localhost (akses via SSH tunnel bila perlu)
+    networks:
+      - genieacs-net
+
+networks:
+  genieacs-net:
+
+volumes:
+  genieacs-mongo-data:

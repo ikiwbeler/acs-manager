@@ -1,0 +1,48 @@
+ACS Manager — Commercial Software License
+Copyright (c) 2026 <LICENSOR / NAMA PENJUAL>. All rights reserved.
+
+Ganti "<LICENSOR / NAMA PENJUAL>" dengan nama/badan hukum Anda sebagai penjual.
+
+1. DEFINISI
+   "Perangkat Lunak" berarti kode sumber dan aset dalam repositori ini, KECUALI
+   komponen pihak ketiga yang disebut pada bagian "KOMPONEN PIHAK KETIGA" di bawah.
+   "Lisensor" adalah pemegang hak cipta di atas. "Pemegang Lisensi" adalah pembeli
+   yang sah.
+
+2. PEMBERIAN LISENSI
+   Dengan pembelian yang sah, Lisensor memberikan Pemegang Lisensi lisensi
+   non-eksklusif dan tidak dapat dipindahtangankan untuk memasang, menjalankan, dan
+   memodifikasi Perangkat Lunak untuk keperluan operasional Pemegang Lisensi.
+
+3. PEMBATASAN
+   Tanpa izin tertulis dari Lisensor, Pemegang Lisensi TIDAK boleh:
+   (a) menjual kembali, menyewakan, mendistribusikan ulang, atau mensublisensikan
+       Perangkat Lunak kepada pihak ketiga;
+   (b) menghapus atau mengaburkan pemberitahuan hak cipta;
+   (c) memasarkan Perangkat Lunak sebagai produk milik pihak lain.
+
+   (Ketentuan pada bagian ini dapat disesuaikan sesuai perjanjian jual-beli antara
+   Lisensor dan Pemegang Lisensi.)
+
+4. TANPA JAMINAN
+   PERANGKAT LUNAK DISEDIAKAN "SEBAGAIMANA ADANYA", TANPA JAMINAN DALAM BENTUK
+   APA PUN. LISENSOR TIDAK BERTANGGUNG JAWAB ATAS KERUGIAN YANG TIMBUL DARI
+   PENGGUNAAN PERANGKAT LUNAK.
+
+===============================================================================
+KOMPONEN PIHAK KETIGA
+===============================================================================
+
+Perangkat Lunak ini BEKERJA DI ATAS namun TIDAK MENYERTAKAN kode sumber GenieACS.
+
+- GenieACS (https://genieacs.com) berlisensi GNU AGPL-3.0. GenieACS di-unduh dan
+  di-install secara terpisah oleh Pemegang Lisensi saat build Docker
+  (`npm install -g genieacs`), dan tidak didistribusikan sebagai bagian dari
+  repositori ini. Penggunaan GenieACS tunduk pada lisensi AGPL-3.0 miliknya.
+
+- Ant Design, React, dan dependensi npm lainnya tunduk pada lisensi masing-masing
+  (umumnya MIT), lihat berkas lisensi di dalam paket npm terkait.
+
+Lisensi komersial di atas berlaku HANYA untuk karya orisinal Lisensor dalam
+repositori ini (dashboard, provisioning scripts, virtual parameters, konfigurasi,
+dan dokumentasi), bukan untuk komponen pihak ketiga.
