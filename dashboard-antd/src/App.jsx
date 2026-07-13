@@ -1,9 +1,10 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Layout, Menu, Badge } from 'antd';
+import { Layout, Menu, Badge, Drawer, Button, Grid, Dropdown } from 'antd';
 import {
   DashboardOutlined, ClusterOutlined, ReloadOutlined, WarningOutlined,
   SettingOutlined, CodeOutlined, FunctionOutlined, ProfileOutlined, FileZipOutlined,
   ControlOutlined, SafetyCertificateOutlined, TeamOutlined, HistoryOutlined, ApiOutlined,
+  MenuOutlined, UserOutlined, LogoutOutlined,
 } from '@ant-design/icons';
 import { Routes, Route, useNavigate, useLocation } from 'react-router-dom';
 import Overview from './pages/Overview.jsx';
@@ -20,8 +21,6 @@ import ApiAccess from './pages/ApiAccess.jsx';
 import Audit from './pages/Audit.jsx';
 import Login from './pages/Login.jsx';
 import { getDevices, getFaults, isAuthed, currentUser, currentRoles, logout, isAdmin } from './api.js';
-import { Dropdown } from 'antd';
-import { UserOutlined, LogoutOutlined } from '@ant-design/icons';
 
 const { Header, Sider, Content } = Layout;
 
@@ -30,8 +29,11 @@ export default function App() {
   const [devices, setDevices] = useState([]);
   const [faultCount, setFaultCount] = useState(0);
   const [loading, setLoading] = useState(false);
+  const [drawerOpen, setDrawerOpen] = useState(false);
   const nav = useNavigate();
   const loc = useLocation();
+  const screens = Grid.useBreakpoint();
+  const isMobile = !screens.lg; // < 992px
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -49,43 +51,67 @@ export default function App() {
   else if (p.startsWith('/audit')) selected = 'audit';
   else if (p.startsWith('/admin/')) selected = p.slice(1);
 
+  const menuItems = [
+    { key: 'overview', icon: <DashboardOutlined />, label: 'Overview' },
+    { key: 'devices', icon: <ClusterOutlined />, label: 'Perangkat ONU' },
+    { key: 'faults', icon: <WarningOutlined />, label: <span>Faults {faultCount > 0 && <Badge count={faultCount} size="small" />}</span> },
+    { key: 'audit', icon: <HistoryOutlined />, label: 'Log Aktivitas' },
+    ...(isAdmin() ? [
+      { type: 'divider' },
+      { key: 'admin', icon: <SettingOutlined />, label: 'Admin', children: [
+        { key: 'admin/presets', icon: <ProfileOutlined />, label: 'Presets' },
+        { key: 'admin/provisions', icon: <CodeOutlined />, label: 'Provisions' },
+        { key: 'admin/virtual-parameters', icon: <FunctionOutlined />, label: 'Virtual Parameters' },
+        { key: 'admin/files', icon: <FileZipOutlined />, label: 'Files' },
+        { key: 'admin/config', icon: <ControlOutlined />, label: 'Config' },
+        { key: 'admin/permissions', icon: <SafetyCertificateOutlined />, label: 'Permissions' },
+        { key: 'admin/users', icon: <TeamOutlined />, label: 'Users' },
+        { key: 'admin/api-access', icon: <ApiOutlined />, label: 'API & Webhook' },
+      ] },
+    ] : []),
+  ];
+
+  const onMenuClick = (e) => { nav(e.key === 'overview' ? '/' : '/' + e.key); setDrawerOpen(false); };
+  const brand = <div style={{ color: '#fff', fontWeight: 700, padding: 16, fontSize: 16 }}>ACS Manager</div>;
+  const menu = (
+    <Menu theme="dark" mode="inline" selectedKeys={[selected]} defaultOpenKeys={['admin']}
+      onClick={onMenuClick} items={menuItems} style={{ borderInlineEnd: 0 }} />
+  );
+
   return (
     <Layout style={{ minHeight: '100vh' }}>
-      <Sider breakpoint="lg" collapsedWidth="0" width={220}>
-        <div style={{ color: '#fff', fontWeight: 700, padding: 16, fontSize: 16 }}>ACS Manager</div>
-        <Menu theme="dark" mode="inline" selectedKeys={[selected]} defaultOpenKeys={['admin']}
-          onClick={(e) => nav(e.key === 'overview' ? '/' : '/' + e.key)}
-          items={[
-            { key: 'overview', icon: <DashboardOutlined />, label: 'Overview' },
-            { key: 'devices', icon: <ClusterOutlined />, label: 'Perangkat ONU' },
-            { key: 'faults', icon: <WarningOutlined />, label: <span>Faults {faultCount > 0 && <Badge count={faultCount} size="small" />}</span> },
-            { key: 'audit', icon: <HistoryOutlined />, label: 'Log Aktivitas' },
-            ...(isAdmin() ? [
-              { type: 'divider' },
-              { key: 'admin', icon: <SettingOutlined />, label: 'Admin', children: [
-                { key: 'admin/presets', icon: <ProfileOutlined />, label: 'Presets' },
-                { key: 'admin/provisions', icon: <CodeOutlined />, label: 'Provisions' },
-                { key: 'admin/virtual-parameters', icon: <FunctionOutlined />, label: 'Virtual Parameters' },
-                { key: 'admin/files', icon: <FileZipOutlined />, label: 'Files' },
-                { key: 'admin/config', icon: <ControlOutlined />, label: 'Config' },
-                { key: 'admin/permissions', icon: <SafetyCertificateOutlined />, label: 'Permissions' },
-                { key: 'admin/users', icon: <TeamOutlined />, label: 'Users' },
-                { key: 'admin/api-access', icon: <ApiOutlined />, label: 'API & Webhook' },
-              ] },
-            ] : []),
-          ]} />
-      </Sider>
+      {!isMobile && (
+        <Sider width={220}>
+          {brand}
+          {menu}
+        </Sider>
+      )}
+      {isMobile && (
+        <Drawer
+          placement="left" open={drawerOpen} onClose={() => setDrawerOpen(false)} width={240}
+          closable={false}
+          styles={{ body: { padding: 0, background: '#001529' }, header: { display: 'none' } }}
+        >
+          {brand}
+          {menu}
+        </Drawer>
+      )}
       <Layout>
-        <Header style={{ background: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingInline: 24 }}>
-          <h2 style={{ margin: 0 }}>GenieACS Dashboard</h2>
-          <span style={{ display: 'flex', alignItems: 'center', gap: 20 }}>
-            <a onClick={load} style={{ cursor: 'pointer' }}><ReloadOutlined spin={loading} /> Refresh</a>
+        <Header style={{ background: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingInline: isMobile ? 12 : 24, gap: 12 }}>
+          <span style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0 }}>
+            {isMobile && <Button type="text" icon={<MenuOutlined />} onClick={() => setDrawerOpen(true)} style={{ marginInlineStart: -8 }} />}
+            <h2 style={{ margin: 0, fontSize: isMobile ? 16 : 20, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+              {isMobile ? 'ACS Manager' : 'GenieACS Dashboard'}
+            </h2>
+          </span>
+          <span style={{ display: 'flex', alignItems: 'center', gap: isMobile ? 14 : 20, flexShrink: 0 }}>
+            <a onClick={load} style={{ cursor: 'pointer' }}><ReloadOutlined spin={loading} />{!isMobile && ' Refresh'}</a>
             <Dropdown menu={{ items: [{ key: 'logout', icon: <LogoutOutlined />, label: 'Logout', onClick: logout }] }}>
-              <a style={{ cursor: 'pointer' }}><UserOutlined /> {currentUser()} <span style={{ color: '#888', fontSize: 12 }}>({currentRoles() || 'no-role'})</span></a>
+              <a style={{ cursor: 'pointer' }}><UserOutlined />{!isMobile && <> {currentUser()} <span style={{ color: '#888', fontSize: 12 }}>({currentRoles() || 'no-role'})</span></>}</a>
             </Dropdown>
           </span>
         </Header>
-        <Content style={{ margin: 24 }}>
+        <Content style={{ margin: isMobile ? 12 : 24 }}>
           <Routes>
             <Route path="/" element={<Overview devices={devices} loading={loading} />} />
             <Route path="/devices" element={<Devices devices={devices} loading={loading} reload={load} />} />
