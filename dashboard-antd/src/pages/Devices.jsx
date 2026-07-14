@@ -89,7 +89,7 @@ export default function Devices({ devices, loading, reload }) {
         <Button size="small" type="primary" ghost icon={<ThunderboltOutlined />} onClick={() => doSummon(r.id)}>Summon</Button>
       </Space>
     ) },
-    { title: 'PPPoE', dataIndex: 'pppoe', width: 190 },
+    { title: 'PPPoE', dataIndex: 'pppoe', width: 190, render: (v, r) => v ? <a onClick={() => open(r.id)}>{v}</a> : null },
     { title: 'SN', dataIndex: 'serial', width: 150 },
     { title: 'MAC', dataIndex: 'mac', width: 150 },
     { title: 'Tipe', dataIndex: 'model', width: 140 },
@@ -104,7 +104,7 @@ export default function Devices({ devices, loading, reload }) {
     { title: 'Suhu', dataIndex: 'suhu', width: 96, render: (v) => v ? <Tag color={suhuColor[v] || 'default'}>{v}</Tag> : null },
     { title: 'Uptime', dataIndex: 'uptime', width: 110 },
     { title: 'Client', dataIndex: 'clients', width: 80 },
-    { title: 'Status', dataIndex: 'online', width: 96, render: (v) => <Badge status={v ? 'success' : 'error'} text={v ? 'Online' : 'Offline'} /> },
+    { title: 'Status', dataIndex: 'online', width: 128, render: (v) => <Badge status={v ? 'success' : 'error'} text={<span style={{ whiteSpace: 'nowrap' }}>{v ? 'Online' : 'Disconnected'}</span>} /> },
   ];
 
   const renderCard = (r) => {
@@ -123,7 +123,7 @@ export default function Devices({ devices, loading, reload }) {
               <Typography.Text type="secondary" style={{ fontSize: 12 }}>{r.model || '—'}</Typography.Text>
             </div>
           </div>
-          <Badge status={r.online ? 'success' : 'error'} text={<span style={{ fontSize: 12 }}>{r.online ? 'Online' : 'Offline'}</span>} />
+          <Badge status={r.online ? 'success' : 'error'} text={<span style={{ fontSize: 12, whiteSpace: 'nowrap' }}>{r.online ? 'Online' : 'Disconnected'}</span>} style={{ flexShrink: 0 }} />
         </div>
 
         <div style={{ marginTop: 12, paddingTop: 10, borderTop: '1px solid #f0f0f0' }}>

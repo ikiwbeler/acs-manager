@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   Card, Row, Col, Descriptions, Tag, Badge, Button, Space, Tabs, Table, Input, Modal,
-  message, Popconfirm, Spin, Form, Typography, Select, Empty, Switch,
+  message, Popconfirm, Spin, Form, Typography, Select, Empty, Switch, Checkbox, InputNumber,
 } from 'antd';
 import {
   ThunderboltOutlined, ReloadOutlined, PoweroffOutlined, WarningOutlined,
@@ -88,7 +88,7 @@ export default function DeviceDetail() {
               <Descriptions.Item label="Tipe">{vp('Model')}</Descriptions.Item>
               <Descriptions.Item label="Mode">{vp('PONMode')}</Descriptions.Item>
               <Descriptions.Item label="Status">
-                <Badge status={online ? 'success' : 'error'} text={online ? 'Online' : 'Offline'} />
+                <Badge status={online ? 'success' : 'error'} text={online ? 'Online' : 'Disconnected'} />
                 {'  '}<Typography.Text type="secondary">{lastInform ? new Date(lastInform).toLocaleString() : '-'}</Typography.Text>
               </Descriptions.Item>
               <Descriptions.Item label="HW / SW">{(pv('InternetGatewayDevice.DeviceInfo.HardwareVersion') || '-') + ' / ' + (pv('InternetGatewayDevice.DeviceInfo.SoftwareVersion') || '-')}</Descriptions.Item>
@@ -231,6 +231,7 @@ function collectWlans(dev) {
           key: base, li, wi, base,
           ssid: val(w.SSID), pass: val(w.KeyPassphrase),
           enable: val(w.Enable), standard: val(w.Standard),
+          broadcast: val(w.SSIDAdvertisementEnabled), maxUser: val(w.MaxUserNum),
         });
       }
     }
@@ -258,6 +259,11 @@ function WifiTab({ did, dev, onSaved }) {
     try { await setParams(did, [[w.base + '.Enable', checked, 'xsd:boolean']]); await onSaved(); message.success(`WLAN ${w.li}/${w.wi} ${checked ? 'diaktifkan' : 'dinonaktifkan'}`); }
     catch (e) { message.error('Gagal'); } finally { setBusy(''); }
   };
+  const toggleBroadcast = async (w, checked) => {
+    setBusy(w.base + ':bc');
+    try { await setParams(did, [[w.base + '.SSIDAdvertisementEnabled', checked, 'xsd:boolean']]); await onSaved(); message.success(`SSID ${w.li}/${w.wi} ${checked ? 'di-broadcast' : 'disembunyikan'}`); }
+    catch (e) { message.error('Gagal ubah broadcast'); } finally { setBusy(''); }
+  };
   const addWlan = async () => {
     const li = wlans[0]?.li || '1';
     setBusy('add');
@@ -283,6 +289,8 @@ function WifiTab({ did, dev, onSaved }) {
         if (s != null && s !== '' && s !== w.ssid) pvs.push([w.base + '.SSID', s, 'xsd:string']);
         const p = vals['pass_' + w.key];
         if (p && p !== effPass(w)) { pvs.push([w.base + '.KeyPassphrase', p, 'xsd:string']); toStore.push([w.base, p]); }
+        const mc = vals['maxuser_' + w.key];
+        if (mc != null && mc !== '' && String(mc) !== String(w.maxUser ?? '')) pvs.push([w.base + '.MaxUserNum', String(mc), 'xsd:unsignedInt']);
       });
       if (!pvs.length) { message.info('Tidak ada perubahan'); setSaving(false); return; }
       await setParams(did, pvs);
@@ -326,11 +334,24 @@ function WifiTab({ did, dev, onSaved }) {
                     name={'pass_' + w.key} initialValue={eff} style={{ marginBottom: 0 }}>
                     <Input.Password placeholder={eff ? '' : 'set password baru…'} />
                   </Form.Item>
+                  {can('wifi.full') && (
+                    <>
+                      <Checkbox
+                        style={{ marginTop: 12 }}
+                        checked={isOn(w.broadcast)}
+                        disabled={busy === w.base + ':bc'}
+                        onChange={(e) => toggleBroadcast(w, e.target.checked)}
+                      >Broadcast SSID {isOn(w.broadcast) ? <Tag color="green" style={{ marginInlineStart: 4 }}>tampil</Tag> : <Tag style={{ marginInlineStart: 4 }}>tersembunyi</Tag>}</Checkbox>
+                      <Form.Item label="Maksimum Client" name={'maxuser_' + w.key} initialValue={w.maxUser ?? undefined} style={{ marginTop: 12, marginBottom: 0 }}>
+                        <InputNumber min={0} max={128} style={{ width: '100%' }} placeholder={w.maxUser != null ? '' : 'kosong = tak diubah'} />
+                      </Form.Item>
+                    </>
+                  )}
                 </Card>
               </Col>
             ); })}
           </Row>
-          <Button type="primary" htmlType="submit" loading={saving} style={{ marginTop: 16 }}>Simpan SSID & Password</Button>
+          <Button type="primary" htmlType="submit" loading={saving} style={{ marginTop: 16 }}>Simpan SSID, Password & Maks. Client</Button>
         </Form>
       )}
     </>

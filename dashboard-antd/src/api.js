@@ -92,6 +92,8 @@ export const refreshWlan = (id) => task(id, { name:'getParameterValues', paramet
   'InternetGatewayDevice.LANDevice.*.WLANConfiguration.*.KeyPassphrase',
   'InternetGatewayDevice.LANDevice.*.WLANConfiguration.*.Enable',
   'InternetGatewayDevice.LANDevice.*.WLANConfiguration.*.Standard',
+  'InternetGatewayDevice.LANDevice.*.WLANConfiguration.*.SSIDAdvertisementEnabled',
+  'InternetGatewayDevice.LANDevice.*.WLANConfiguration.*.MaxUserNum',
 ] });
 export const refreshWan = (id) => task(id, { name:'getParameterValues', parameterNames: [
   'InternetGatewayDevice.WANDevice.*.WANConnectionDevice.*.WANIPConnection.*.Name',
