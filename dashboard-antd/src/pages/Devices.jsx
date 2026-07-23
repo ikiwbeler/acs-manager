@@ -5,7 +5,7 @@ import {
 } from 'antd';
 import {
   ThunderboltOutlined, PoweroffOutlined, TagsOutlined, DeleteOutlined,
-  AppstoreOutlined, UnorderedListOutlined,
+  AppstoreOutlined, UnorderedListOutlined, DownloadOutlined,
 } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import { summon, reboot, addTag, removeTag, deleteDevice, can } from '../api.js';
@@ -43,6 +43,39 @@ function Metric({ label, children }) {
   );
 }
 
+// Export CSV daftar ONU terpilih (tanpa dependency, BOM UTF-8 supaya rapi di Excel).
+const CSV_COLS = [
+  ['Device ID', 'id'], ['PPPoE', 'pppoe'], ['SN', 'serial'], ['MAC', 'mac'],
+  ['Tipe', 'model'], ['Mode', 'mode'], ['IP', 'ip'], ['IP Mgmt', 'ipMgmt'],
+  ['SSID', 'ssid'], ['Rx (dBm)', 'rx'], ['Redaman', 'redaman'], ['Temp (C)', 'temp'],
+  ['Suhu', 'suhu'], ['Uptime', 'uptime'], ['Client', 'clients'],
+  ['Status', (r) => (r.online ? 'Online' : 'Disconnected')],
+  ['Last Inform', 'lastInform'], ['Tags', (r) => (r.tags || []).join(' ')],
+];
+function csvCell(v) {
+  const s = v == null ? '' : String(v);
+  return '"' + s.replace(/"/g, '""') + '"';
+}
+function exportCSV(rows) {
+  const header = CSV_COLS.map((c) => csvCell(c[0])).join(',');
+  const body = rows.map((r) =>
+    CSV_COLS.map((c) => csvCell(typeof c[1] === 'function' ? c[1](r) : r[c[1]])).join(',')
+  ).join('\r\n');
+  const csv = '﻿' + header + '\r\n' + body + '\r\n';
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const d = new Date();
+  const pad = (n) => String(n).padStart(2, '0');
+  const stamp = `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}-${pad(d.getHours())}${pad(d.getMinutes())}`;
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `onu-export-${stamp}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
 export default function Devices({ devices, loading, reload }) {
   const [q, setQ] = useState('');
   const [sel, setSel] = useState([]);
@@ -54,6 +87,12 @@ export default function Devices({ devices, loading, reload }) {
   const open = (id) => nav('/device/' + encodeURIComponent(id));
   const toggleSel = (id, checked) => setSel((prev) => (checked ? [...new Set([...prev, id])] : prev.filter((x) => x !== id)));
   const doSummon = async (id) => { try { await summon(id); message.success('Summon terkirim'); setTimeout(reload, 4000); } catch (e) { message.error('Gagal summon'); } };
+  const doExport = () => {
+    const rows = devices.filter((d) => sel.includes(d.id));
+    if (!rows.length) { message.warning('Pilih ONU dulu'); return; }
+    exportCSV(rows);
+    message.success(`Export ${rows.length} ONU ke CSV`);
+  };
 
   // Bulk runner: jalankan fn utk tiap id terpilih, berurutan + progress
   const runBulk = async (label, fn, reloadAfter = true) => {
@@ -168,6 +207,7 @@ export default function Devices({ devices, loading, reload }) {
           {can('tags') && <Button size="small" icon={<TagsOutlined />} onClick={() => bulkTag(false)}>Tambah Tag</Button>}
           {can('tags') && <Button size="small" icon={<TagsOutlined />} onClick={() => bulkTag(true)}>Hapus Tag</Button>}
           {can('device.delete') && <Button size="small" icon={<DeleteOutlined />} danger onClick={bulkDelete}>Hapus</Button>}
+          <Button size="small" icon={<DownloadOutlined />} onClick={doExport}>Export CSV</Button>
           <Button size="small" type="link" onClick={() => setSel([])}>Batal pilih</Button>
         </Space>
       )}
@@ -175,13 +215,13 @@ export default function Devices({ devices, loading, reload }) {
       {view === 'table' ? (
         <Table columns={columns} dataSource={data} loading={loading} scroll={{ x: 2100 }} size="middle"
           rowKey="id" rowSelection={{ selectedRowKeys: sel, onChange: setSel, preserveSelectedRowKeys: true }}
-          pagination={{ defaultPageSize: 20, showSizeChanger: true, pageSizeOptions: ['10', '20', '50', '100'], showTotal: (t) => `${t} ONU` }} />
+          pagination={{ defaultPageSize: 10, showSizeChanger: true, pageSizeOptions: ['10', '20', '50', '100'], showTotal: (t) => `${t} ONU` }} />
       ) : (
         <List
           grid={{ gutter: 16, xs: 1, sm: 2, md: 2, lg: 3, xl: 3, xxl: 4 }}
           dataSource={data} loading={loading}
           locale={{ emptyText: <Empty description="Tidak ada ONU" /> }}
-          pagination={{ defaultPageSize: 12, showSizeChanger: true, pageSizeOptions: ['8', '12', '24', '48'], showTotal: (t) => `${t} ONU` }}
+          pagination={{ defaultPageSize: 10, showSizeChanger: true, pageSizeOptions: ['10', '20', '40'], showTotal: (t) => `${t} ONU` }}
           renderItem={(r) => <List.Item style={{ marginBottom: 0 }}>{renderCard(r)}</List.Item>}
         />
       )}
