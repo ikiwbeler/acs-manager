@@ -49,3 +49,10 @@ declare("VirtualParameters.PONMode", {value: Date.now(86400000)});
 declare("VirtualParameters.Model", {value: Date.now(86400000)});
 declare("VirtualParameters.RedamanStatus", {value: Date.now(300000)});
 declare("VirtualParameters.SuhuStatus", {value: Date.now(300000)});
+
+// --- Kredensial akun web ONT (fitur Akses ONT dashboard) ---
+// ONT yang tak punya param ini mengabaikannya tanpa fault (sudah diuji lintas-merk).
+declare("InternetGatewayDevice.DeviceInfo.X_CT-COM_TeleComAccount.Password", {path: hourly, value: hourly});
+declare("InternetGatewayDevice.UserInterface.X_ZTE-COM_WebUserInfo.AdminName", {path: hourly, value: hourly});
+declare("InternetGatewayDevice.UserInterface.X_ZTE-COM_WebUserInfo.UserName", {path: hourly, value: hourly});
+declare("InternetGatewayDevice.X_CT-COM_UserInfo.UserName", {path: hourly, value: hourly});

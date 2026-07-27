@@ -1,0 +1,34 @@
+{
+  "_comment": "Manifest paket seed ACS Manager (Fase 0). Dipakai oleh seed.py dan wizard setup (Fase 2). Paket bersifat kumulatif: Standard & Advanced adalah TAMBAHAN di atas Core.",
+  "version": 1,
+  "resources": {
+    "virtual_parameters": { "dir": "virtual-parameters", "via": "nbi" },
+    "provisions":         { "dir": "provisions",         "via": "nbi" },
+    "config":             { "dir": "ui-config",          "via": "mongo" }
+  },
+  "packages": [
+    {
+      "id": "core",
+      "label": "Core",
+      "required": true,
+      "description": "Wajib. Provision (bootstrap/inform/default), tampilan UI bawaan, dan VP inti: identitas ONU, jaringan, sinyal optik (RX/redaman), mode PON, dan status online.",
+      "provisions": ["bootstrap", "inform", "default"],
+      "config": ["ui-index.devicelist", "overview-model-chart", "overview-redaman-chart", "overview-suhu-chart"],
+      "virtual_parameters": ["Model", "PPPoEUsername", "WANIP", "WANMAC", "IPMgmt", "Uptime", "ClientCount", "PONMode", "RXPower", "RedamanStatus"]
+    },
+    {
+      "id": "standard",
+      "label": "Standard",
+      "default": true,
+      "description": "Monitoring suhu transceiver ONT: nilai suhu + status Normal/Warning/Kritis.",
+      "virtual_parameters": ["Temperature", "SuhuStatus"]
+    },
+    {
+      "id": "advanced",
+      "label": "Advanced",
+      "default": false,
+      "description": "Opsional/kompatibilitas: alias suhu legacy (gettemp). Slot untuk manajemen WiFi & diagnostik lanjutan ke depan.",
+      "virtual_parameters": ["gettemp"]
+    }
+  ]
+}

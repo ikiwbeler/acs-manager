@@ -32,23 +32,35 @@ Port yang diekspos:
 
 ---
 
-## 2. Import Provisions & Virtual Parameters
+## 2. Seed Provisions, Virtual Parameters & UI Config
 
-Provisions & virtual parameters ada di folder `provisions/` dan `virtual-parameters/`.
-Import ke GenieACS lewat NBI (dari server, karena NBI di localhost). Contoh untuk satu virtual parameter:
+Semua provision, virtual parameter, dan konfigurasi UI ditanam otomatis oleh **`seed.py`**
+(idempotent — aman dijalankan ulang). Paket diatur di `packages.json` (Core / Standard / Advanced).
 
 ```bash
-# Virtual parameter (ulangi untuk tiap file di virtual-parameters/)
-curl -i 'http://127.0.0.1:7557/provisions/RXPower' \
-  -X PUT --data-binary @virtual-parameters/RXPower.multimodel.js
+# lihat paket yang tersedia + isinya
+python3 seed.py --list
 
-# Provision (default & inform)
-curl -i 'http://127.0.0.1:7557/provisions/default' -X PUT --data-binary @provisions/default.js
-curl -i 'http://127.0.0.1:7557/provisions/inform'  -X PUT --data-binary @provisions/inform.js
+# seed Core + Standard (default). Tambah advanced bila perlu:
+python3 seed.py                       # core + standard
+python3 seed.py --all                 # core + standard + advanced
+
+# cek dulu tanpa mengubah apa pun:
+python3 seed.py --dry-run             # tampilkan rencana
+python3 seed.py --check               # bandingkan dgn yang sudah ada di server
 ```
 
-> Atau import lewat UI bawaan (`:3000`, via SSH tunnel) menu Admin → Provisions / Virtual Parameters.
-> Pastikan setiap Virtual Parameter juga terdaftar di provision `default` (sudah tercantum di `provisions/default.js`).
+Mekanisme (otomatis per jenis, lihat `packages.json`):
+- `virtual_parameters` & `provisions` → NBI HTTP PUT (`http://127.0.0.1:7557`)
+- `config` (ui-config/\*.js) → mongo shell (`docker exec -i genieacs-mongo mongo ... genieacs`)
+
+Override bila perlu: `ACS_NBI=...` dan `ACS_MONGO_EXEC="..."`.
+
+> Alternatif manual: import lewat UI bawaan (`:3000`, via SSH tunnel) menu Admin → Provisions / Virtual Parameters.
+> Setiap Virtual Parameter juga harus terdaftar di provision `default` (sudah tercantum di `provisions/default.js`).
+>
+> **Catatan keamanan:** `provisions/inform.js` memakai password ConnectionRequest default `acsmanager`.
+> Ganti nilai ini per-instalasi (nanti otomatis lewat wizard setup pada Fase 2).
 
 Arahkan perangkat ke ACS via **DHCP Option 43** atau konfigurasi OLT: ACS URL = `http://IP-SERVER:7547`.
 
