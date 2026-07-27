@@ -39,6 +39,8 @@ function requiredCap(method, path, body) {
     const ep = path.slice('/api/admin/'.length);
     if (ep === 'wifi-pass-save') return 'wifi.ssid';
     if (ep === 'wifi-pass-list') return 'view';
+    if (ep === 'ont-cred-save') return 'param.edit'; // set password login ONT = ubah device
+    if (ep === 'ont-cred-list') return 'view';
     if (ep === 'audit-list') return 'view';
     return 'admin.manage'; // config/permissions/users management
   }
@@ -276,6 +278,41 @@ function adminApi() {
           const out = mongoEval(`print(JSON.stringify(db.dash_wifi_pw.find({device:${JSON.stringify(device)}}).toArray().map(function(d){return {base:d.base,password:d.password};})))`);
           const lines = out.split('\n').map((s) => s.trim()).filter(Boolean);
           send(res, 200, JSON.parse(lines[lines.length - 1] || '[]'));
+        } catch (e) { send(res, 500, { error: String(e.message || e) }); }
+      });
+      // Kredensial akses (login web) ONT. Password ONT bersifat WRITE-ONLY di TR-069 (ONT tidak
+      // pernah mengirim balik), jadi yang KITA set lewat ACS disimpan di sini agar bisa "di-summon"
+      // (dilihat) lagi kapan pun. Username tetap dibaca langsung dari ONT.
+      server.middlewares.use('/api/admin/ont-cred-save', async (req, res, next) => {
+        if (req.method !== 'POST') return next();
+        try {
+          const b = JSON.parse(await readBody(req));
+          const device = b.device;
+          if (!device) throw new Error('device wajib');
+          const tok = authed(req);
+          const set = {
+            device: String(device),
+            scheme: String(b.scheme || ''),
+            adminName: String(b.adminName || ''),
+            adminPassword: String(b.adminPassword || ''),
+            userName: String(b.userName || ''),
+            userPassword: String(b.userPassword || ''),
+            webUrl: String(b.webUrl || ''),
+            updatedBy: (tok && tok.user) || '-',
+            updatedAt: Date.now(),
+          };
+          mongoEval(`db.dash_ont_cred.updateOne({_id:${JSON.stringify(String(device))}},{$set:${JSON.stringify(set)}},{upsert:true})`);
+          logAudit(tok, 'POST', '/api/admin/ont-cred-save', null, { action: 'ont.access', target: device, summary: 'Set password akses ONT @ ' + device + (b.adminName ? ' (admin: ' + b.adminName + ')' : '') });
+          send(res, 200, { ok: true });
+        } catch (e) { send(res, 500, { error: String(e.message || e) }); }
+      });
+      server.middlewares.use('/api/admin/ont-cred-list', async (req, res, next) => {
+        if (req.method !== 'POST') return next();
+        try {
+          const { device } = JSON.parse(await readBody(req));
+          const out = mongoEval(`print(JSON.stringify(db.dash_ont_cred.findOne({_id:${JSON.stringify(String(device))}}) || {}))`);
+          const lines = out.split('\n').map((s) => s.trim()).filter(Boolean);
+          send(res, 200, JSON.parse(lines[lines.length - 1] || '{}'));
         } catch (e) { send(res, 500, { error: String(e.message || e) }); }
       });
 

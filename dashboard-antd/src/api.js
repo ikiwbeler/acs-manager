@@ -1,6 +1,6 @@
 const BASE = '/nbi';
 const LIST_PROJ = [
-  '_lastInform','_tags',
+  '_lastInform','_tags','_registered',
   'VirtualParameters.Model','VirtualParameters.PONMode','VirtualParameters.WANIP','VirtualParameters.IPMgmt',
   'VirtualParameters.WANMAC','VirtualParameters.PPPoEUsername','VirtualParameters.RXPower','VirtualParameters.RedamanStatus',
   'VirtualParameters.Temperature','VirtualParameters.SuhuStatus','VirtualParameters.Uptime','VirtualParameters.ClientCount',
@@ -67,7 +67,10 @@ export async function getDevices() {
       ip: vp(d,'WANIP'), ipMgmt: vp(d,'IPMgmt'), ssid: ssid(d), pppoe: vp(d,'PPPoEUsername'),
       rx: vp(d,'RXPower'), redaman: vp(d,'RedamanStatus'), temp: vp(d,'Temperature'), suhu: vp(d,'SuhuStatus'),
       uptime: vp(d,'Uptime'), clients: vp(d,'ClientCount'), lastInform: d._lastInform,
-      online: now - last < 5 * 60 * 1000,
+      registered: d._registered,
+      // Ambang 10 menit (2x interval inform 300s) supaya ONU sehat tak flicker "Disconnected"
+      // tepat sebelum inform berikutnya. Offline = lewat 2x inform.
+      online: now - last < 10 * 60 * 1000,
     };
   });
 }
@@ -268,6 +271,98 @@ export const disableUser = (username) => adminPost('user-disable', { username })
 export const enableUser = (username) => adminPost('user-enable', { username });
 export const saveWifiPass = (device, base, password) => adminPost('wifi-pass-save', { device, base, password });
 export const getWifiPass = (device) => adminPost('wifi-pass-list', { device });
+
+// === Kredensial akses (login web) ONT ===
+// Password ONT bersifat write-only di TR-069 — ONT tak pernah mengirim balik, hanya username yang
+// bisa dibaca. Password yang KITA set via ACS dicatat di dashboard agar bisa dilihat lagi nanti.
+export const getOntCred = (device) => adminPost('ont-cred-list', { device });
+export const saveOntCred = (device, data) => adminPost('ont-cred-save', { device, ...data });
+// Deteksi skema akun web dari pohon device. null bila model tak mengeksposnya lewat TR-069.
+// mode 'full' = bisa summon & set password. account.pwReadable=true berarti password bisa
+//   dibaca langsung dari ONT (mis. CT-COM X_CT-COM_TeleComAccount); false = write-only (ZTE),
+//   nilai yg ditampilkan diambil dari catatan dashboard. account.fixedName = username tetap
+//   (tak ada param namanya di ONT). mode 'info' = ONT tak mengekspos akun web -> hanya panduan.
+// Prioritas deteksi: ZTE -> CT-COM TeleComAccount (readable) -> CT-COM belum ter-fetch (info/probe).
+// Daftar path kredensial per merk (diadaptasi dari repo alijayanet/virtualparameter).
+const P = 'InternetGatewayDevice.';
+const ONT_CRED_READ_ALL = [
+  P + 'UserInterface.X_ZTE-COM_WebUserInfo.AdminName', P + 'UserInterface.X_ZTE-COM_WebUserInfo.UserName',
+  P + 'UserInterface.X_HW_WebUserInfo.1.UserName', P + 'UserInterface.X_HW_WebUserInfo.1.Password', P + 'UserInterface.X_HW_WebUserInfo.2.UserName', P + 'UserInterface.X_HW_WebUserInfo.2.Password',
+  P + 'X_CU_Function.Web.UserName', P + 'X_CU_Function.Web.AdminPassword', P + 'X_CU_Function.Web.UserPassword',
+  P + 'DeviceInfo.X_FH_Account.X_FH_WebUserInfo.WebUsername', P + 'DeviceInfo.X_FH_Account.X_FH_WebUserInfo.WebPassword', P + 'DeviceInfo.X_FH_Account.X_FH_WebUserInfo.WebSuperPassword',
+  P + 'User.1.Username', P + 'User.1.Password', P + 'User.2.Username', P + 'User.2.Password',
+  P + 'DeviceInfo.X_CT-COM_TeleComAccount.Password', P + 'X_CT-COM_UserInfo.UserName',
+];
+export function ontCredScheme(dev) {
+  const igd = dev?.InternetGatewayDevice;
+  if (!igd) return null;
+  // leaf(path): true bila node parameter (punya _value/_writable) benar-benar ada di tree device.
+  const leaf = (path) => {
+    let n = dev;
+    for (const s of path.split('.')) { if (!n || typeof n !== 'object') return false; n = n[s]; }
+    return !!(n && typeof n === 'object' && ('_value' in n || '_writable' in n));
+  };
+  const full = (scheme, accounts, readNames, webUrlParam) => ({ scheme, mode: 'full', accounts, readNames, webUrlParam: webUrlParam || null });
+
+  // 1) ZTE — dua varian base. Password write-only (pakai catatan), username writable.
+  for (const b of [P + 'UserInterface.X_ZTE-COM_WebUserInfo', P + 'X_ZTE-COM_UserInterface.X_ZTE-COM_WebUserInfo']) {
+    if (leaf(b + '.AdminName') || leaf(b + '.UserName')) {
+      return full('zte', [
+        { key: 'admin', label: 'Admin (superadmin)', nameParam: b + '.AdminName', pwParam: b + '.AdminPassword', pwReadable: false, nameWritable: true },
+        { key: 'user', label: 'User biasa', nameParam: b + '.UserName', pwParam: b + '.UserPassword', pwReadable: false, nameWritable: true },
+      ], ['AdminName', 'UserName', 'WebIp'].map((s) => b + '.' + s), leaf(b + '.WebIp') ? b + '.WebIp' : null);
+    }
+  }
+  // 2) Huawei — X_HW_WebUserInfo.{1,2}. Username & password readable+writable.
+  {
+    const b = P + 'UserInterface.X_HW_WebUserInfo';
+    if (leaf(b + '.1.UserName') || leaf(b + '.1.Password')) {
+      const accts = [{ key: 'admin', label: 'Admin (Huawei)', nameParam: b + '.1.UserName', pwParam: b + '.1.Password', pwReadable: true, nameWritable: true }];
+      if (leaf(b + '.2.UserName') || leaf(b + '.2.Password')) accts.push({ key: 'user', label: 'User (Huawei)', nameParam: b + '.2.UserName', pwParam: b + '.2.Password', pwReadable: true, nameWritable: true });
+      return full('huawei', accts, [b + '.1.UserName', b + '.1.Password', b + '.2.UserName', b + '.2.Password']);
+    }
+  }
+  // 3) China Unicom — X_CU_Function.Web.
+  {
+    const b = P + 'X_CU_Function.Web';
+    if (leaf(b + '.UserName')) {
+      const pw = leaf(b + '.AdminPassword') ? b + '.AdminPassword' : b + '.UserPassword';
+      return full('unicom', [{ key: 'admin', label: 'Admin (Unicom)', nameParam: b + '.UserName', pwParam: pw, pwReadable: true, nameWritable: true }], [b + '.UserName', b + '.AdminPassword', b + '.UserPassword']);
+    }
+  }
+  // 4) FiberHome — X_FH_Account.X_FH_WebUserInfo.
+  {
+    const b = P + 'DeviceInfo.X_FH_Account.X_FH_WebUserInfo';
+    if (leaf(b + '.WebUsername')) {
+      const pw = leaf(b + '.WebSuperPassword') ? b + '.WebSuperPassword' : b + '.WebPassword';
+      return full('fiberhome', [{ key: 'admin', label: 'Admin (FiberHome)', nameParam: b + '.WebUsername', pwParam: pw, pwReadable: true, nameWritable: true }], [b + '.WebUsername', b + '.WebPassword', b + '.WebSuperPassword']);
+    }
+  }
+  // 5) Tabel standar TR-098 User.{i}.
+  {
+    const accts = [];
+    for (const i of ['1', '2']) {
+      const b = P + 'User.' + i;
+      if (leaf(b + '.Username') || leaf(b + '.Password')) accts.push({ key: i === '1' ? 'admin' : 'user', label: 'User ' + i, nameParam: b + '.Username', pwParam: b + '.Password', pwReadable: true, nameWritable: true });
+    }
+    if (accts.length) return full('user-table', accts, accts.flatMap((a) => [a.nameParam, a.pwParam]));
+  }
+  // 6) CT-COM — password akun "admin" di X_CT-COM_TeleComAccount.Password (readable+writable).
+  //    Username "admin" TERKUNCI firmware (node ini tak punya field Username).
+  const tca = P + 'DeviceInfo.X_CT-COM_TeleComAccount.Password';
+  if (leaf(tca)) {
+    return full('ctcom', [{ key: 'admin', label: 'Admin (login web)', fixedName: 'admin', pwParam: tca, pwReadable: true, nameWritable: false }], [tca]);
+  }
+  // 7) Fallback info/probe: belum terdeteksi akun web -> sediakan Summon multi-merk untuk mendeteksi.
+  const c = P + 'X_CT-COM_UserInfo';
+  return {
+    scheme: 'auto', mode: 'info',
+    readNames: ONT_CRED_READ_ALL,
+    placeholderNameParam: leaf(c + '.UserName') ? c + '.UserName' : null,
+    note: 'Klik "Summon dari ONT" untuk mendeteksi akun web (mencoba path ZTE/Huawei/CT-COM/China Unicom/FiberHome/User). Bila ONT mengeksposnya, panel otomatis jadi mode penuh (lihat & ganti username/password). Bila tetap kosong, model ini tak mengeksposnya via TR-069.',
+    defaults: ['admin / admin', 'user / user', 'telecomadmin / (default vendor)'],
+  };
+}
 export async function getUsersFull(){ const r = await afetch('/api/admin/users-list'); if (!r.ok) throw new Error('gagal'); return r.json(); }
 export async function getAuditLog(opts = {}){ const r = await afetch('/api/admin/audit-list', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(opts) }); if (!r.ok) throw new Error('gagal memuat log'); return r.json(); }
 export const getConfig = () => listRes('config');

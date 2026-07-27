@@ -2,18 +2,19 @@ import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   Card, Row, Col, Descriptions, Tag, Badge, Button, Space, Tabs, Table, Input, Modal,
-  message, Popconfirm, Spin, Form, Typography, Select, Empty, Switch, Checkbox, InputNumber,
+  message, Popconfirm, Spin, Form, Typography, Select, Empty, Switch, Alert, Checkbox, InputNumber,
 } from 'antd';
 import {
   ThunderboltOutlined, ReloadOutlined, PoweroffOutlined, WarningOutlined,
   DeleteOutlined, WifiOutlined, EditOutlined, ArrowLeftOutlined, PlusOutlined,
-  CloudDownloadOutlined, ApartmentOutlined, GlobalOutlined,
+  CloudDownloadOutlined, ApartmentOutlined, GlobalOutlined, KeyOutlined,
 } from '@ant-design/icons';
 import {
   getDevice, flatten, summon, reboot, factoryReset, refreshAll, refreshHosts, setParams,
   addTag, removeTag, deleteDevice, clearDeviceFaults,
   getDeviceTasks, deleteTask, getFiles, downloadToDevice, addObject, deleteObject, refreshWlan, refreshWan,
   getWifiPass, saveWifiPass, createWanGuided, can,
+  getParams, getOntCred, saveOntCred, ontCredScheme,
 } from '../api.js';
 
 const statColor = { Normal: 'green', Warning: 'gold', Kritis: 'red', Overload: 'orange' };
@@ -40,7 +41,7 @@ export default function DeviceDetail() {
   const pv = (p) => params.find((x) => x.path === p)?.value;
   const vp = (k) => dev?.VirtualParameters?.[k]?._value ?? '-';
   const lastInform = dev._lastInform;
-  const online = lastInform && (Date.now() - new Date(lastInform).getTime() < 300000);
+  const online = lastInform && (Date.now() - new Date(lastInform).getTime() < 600000);
   const tags = dev._tags || [];
 
   const wlans = [];
@@ -115,6 +116,7 @@ export default function DeviceDetail() {
       <Card style={{ marginTop: 16 }} size="small">
         <Tabs items={[
           { key: 'wifi', label: <span><WifiOutlined /> WiFi</span>, children: <WifiTab did={did} dev={dev} onSaved={load} /> },
+          { key: 'akses', label: <span><KeyOutlined /> Akses ONT</span>, children: <AksesOntTab did={did} dev={dev} onSaved={load} /> },
           ...(can('wan.edit') ? [{ key: 'wan', label: <span><GlobalOutlined /> WAN</span>, children: <WanTab did={did} dev={dev} onSaved={load} /> }] : []),
           { key: 'hosts', label: 'Perangkat Terhubung', children: <HostsTab dev={dev} did={did} onReload={load} /> },
           { key: 'params', label: 'Semua Parameter', children: <ParamsTab did={did} params={params} onChange={load} /> },
@@ -354,6 +356,177 @@ function WifiTab({ did, dev, onSaved }) {
           <Button type="primary" htmlType="submit" loading={saving} style={{ marginTop: 16 }}>Simpan SSID, Password & Maks. Client</Button>
         </Form>
       )}
+    </>
+  );
+}
+
+// Baca _value sebuah leaf dari pohon device mengikuti path bertitik.
+function nodeVal(dev, path) {
+  let n = dev;
+  for (const seg of path.split('.')) { if (!n || typeof n !== 'object') return undefined; n = n[seg]; }
+  return n && typeof n === 'object' ? n._value : undefined;
+}
+
+// Tab "Akses ONT": summon username/password login web ONT + ganti password saat lupa akses.
+// ZTE: password write-only (tampil dari catatan dashboard). CT-COM: password readable dari
+// X_CT-COM_TeleComAccount (tampil langsung dari ONT). Model tanpa akun web -> mode info.
+function AksesOntTab({ did, dev, onSaved }) {
+  const [form] = Form.useForm();
+  const sch = ontCredScheme(dev);
+  const [stored, setStored] = useState(null); // catatan dari dashboard (db.dash_ont_cred)
+  const [busy, setBusy] = useState('');
+  const [saving, setSaving] = useState(false);
+  useEffect(() => { getOntCred(did).then((d) => setStored(d || {})).catch(() => setStored({})); }, [did]);
+
+  if (!sch) return <Alert type="info" showIcon style={{ margin: 4 }}
+    message="Model ONT ini tidak mengekspos akun login web lewat TR-069"
+    description="Username & password login web tidak bisa ditarik maupun di-set dari sini untuk perangkat ini. Coba klik Summon di atas dulu bila datanya memang belum pernah diambil." />;
+  if (stored === null) return <div style={{ padding: 20 }}><Spin /> Memuat…</div>;
+
+  const doSummon = async () => {
+    setBusy('summon');
+    try { await getParams(did, sch.readNames); await onSaved(); message.success('Data ditarik dari ONT'); }
+    catch (e) { message.error('Gagal menarik dari ONT (mungkin sedang offline)'); }
+    finally { setBusy(''); }
+  };
+
+  // Mode INFO: model tak mengekspos akun web asli (mis. rebrand CT-COM) -> hanya info & panduan.
+  if (sch.mode === 'info') {
+    const placeholder = (sch.placeholderNameParam && nodeVal(dev, sch.placeholderNameParam)) || '';
+    return (
+      <>
+        <Alert type="info" showIcon style={{ marginBottom: 12 }}
+          message="Akun web ONT belum terdeteksi — klik Summon untuk mendeteksi"
+          description={sch.note} />
+        <Space style={{ marginBottom: 12 }} wrap>
+          <Button type="primary" icon={<ReloadOutlined />} loading={busy === 'summon'} onClick={doSummon}>Summon dari ONT</Button>
+          <Typography.Text type="secondary" style={{ fontSize: 12 }}>skema: {sch.scheme.toUpperCase()}</Typography.Text>
+        </Space>
+        {sch.placeholderNameParam
+          ? <Descriptions column={1} size="small" bordered style={{ marginBottom: 12 }}>
+              <Descriptions.Item label="Field pabrik (X_CT-COM_UserInfo.UserName)">
+                {placeholder
+                  ? <Space><Typography.Text code>{placeholder}</Typography.Text><Tag color="orange">placeholder, bukan login asli</Tag></Space>
+                  : <Typography.Text type="secondary">— (kosong)</Typography.Text>}
+              </Descriptions.Item>
+            </Descriptions>
+          : null}
+        <Card size="small" title={<span><KeyOutlined /> Cara masuk ONT ini</span>}>
+          <Typography.Paragraph style={{ marginBottom: 8 }}>Coba akun default pabrik di halaman web ONT (IP gateway, mis. 192.168.1.1):</Typography.Paragraph>
+          <ul style={{ marginTop: 0, paddingInlineStart: 20 }}>
+            {(sch.defaults || []).map((d) => <li key={d}><Typography.Text code>{d}</Typography.Text></li>)}
+          </ul>
+          <Typography.Text type="secondary">Bila semua gagal (password sudah diganti & lupa), satu-satunya jalan adalah <b>reset fisik</b> ONT — konsekuensinya konfigurasi WiFi/WAN kembali ke default dan perlu di-setting ulang.</Typography.Text>
+        </Card>
+      </>
+    );
+  }
+
+  const pwKey = (k) => (k === 'admin' ? 'adminPassword' : 'userPassword');
+  const nameKey = (k) => (k === 'admin' ? 'adminName' : 'userName');
+  const webUrl = (sch.webUrlParam && nodeVal(dev, sch.webUrlParam)) || stored.webUrl || '';
+  const accts = sch.accounts.map((a) => {
+    const username = a.fixedName ?? (a.nameParam ? nodeVal(dev, a.nameParam) : '') ?? '';
+    const livePw = a.pwReadable ? (nodeVal(dev, a.pwParam) || '') : '';   // password terbaca dari ONT
+    const storedPw = stored[pwKey(a.key)] || '';                          // catatan dashboard
+    const effPw = livePw || storedPw;
+    const src = livePw ? 'dari ONT' : (storedPw ? 'catatan tersimpan' : null);
+    return { ...a, username, livePw, storedPw, effPw, src };
+  });
+  const anyReadable = accts.some((a) => a.pwReadable);
+
+  const onSave = async (vals) => {
+    setSaving(true);
+    try {
+      const pvs = []; const store = { scheme: sch.scheme, webUrl }; const wantUser = {};
+      accts.forEach((a) => {
+        const nu = vals['user_' + a.key];
+        if (a.nameWritable && a.nameParam && nu && nu !== a.username) { pvs.push([a.nameParam, nu, 'xsd:string']); wantUser[a.key] = nu; }
+        const np = vals['pw_' + a.key];
+        if (np) pvs.push([a.pwParam, np, 'xsd:string']);
+        store[pwKey(a.key)] = np || a.effPw || '';
+        store[nameKey(a.key)] = (a.nameWritable && nu) ? nu : (a.username || '');
+      });
+      if (!pvs.length) { message.info('Isi username/password baru yang ingin diganti'); setSaving(false); return; }
+      await setParams(did, pvs);            // tulis username/password baru ke ONT
+      await saveOntCred(did, store);        // catat sebagai cadangan
+      setStored((m) => ({ ...(m || {}), ...store }));
+      try { await getParams(did, sch.readNames); } catch (e) {} // baca-ulang dari ONT
+      await onSaved();
+      // Verifikasi username benar-benar berubah di ONT (sebagian firmware mengunci username).
+      let warn = '';
+      if (Object.keys(wantUser).length) {
+        try {
+          const fresh = await getDevice(did);
+          for (const a of accts) {
+            if (wantUser[a.key] != null && a.nameParam && nodeVal(fresh, a.nameParam) !== wantUser[a.key]) {
+              warn = 'Password diterapkan, tapi USERNAME tampaknya tidak berubah di ONT — kemungkinan dikunci firmware perangkat ini.';
+            }
+          }
+        } catch (e) {}
+      }
+      form.resetFields();
+      if (warn) message.warning(warn, 6);
+      else message.success('Perubahan dikirim ke ONT (cek nilai terbaru di atas)');
+    } catch (e) { message.error('Gagal set: ' + (e.message || '')); }
+    finally { setSaving(false); }
+  };
+
+  return (
+    <>
+      {anyReadable
+        ? <Alert type="success" showIcon style={{ marginBottom: 12 }}
+            message="Password login ONT ini bisa dibaca langsung dari ONT"
+            description={<span>Password akun web (login <b>admin</b>) ditarik langsung dari ONT saat <b>Summon</b>. Isi <b>Ganti password</b> lalu <b>Set</b> untuk mengubahnya. Username <b>admin</b> pada model ini <b>terkunci firmware</b> (tak ada parameter-nya), jadi tidak bisa diganti via ACS.</span>} />
+        : <Alert type="warning" showIcon style={{ marginBottom: 12 }}
+            message="Username & password login ONT bisa diganti (password write-only)"
+            description={<span><b>Username</b> ditarik dari ONT dan <b>bisa diganti</b> (ubah kolomnya). <b>Password</b> yang tampil = catatan tersimpan saat Anda set lewat dashboard (bukan password lama). Menekan <b>Set</b> <b>mengubah login ONT pelanggan langsung</b>. Catatan: sebagian firmware mengunci username — bila tak berubah, dashboard akan memberi tahu.</span>} />}
+      <Space style={{ marginBottom: 12 }} wrap>
+        <Button icon={<ReloadOutlined />} loading={busy === 'summon'} onClick={doSummon}>Summon dari ONT</Button>
+        {webUrl ? <Typography.Text type="secondary">Web ONT: <a href={webUrl} target="_blank" rel="noreferrer">{webUrl}</a></Typography.Text> : null}
+        <Typography.Text type="secondary" style={{ fontSize: 12 }}>skema: {sch.scheme.toUpperCase()}</Typography.Text>
+      </Space>
+      <Form form={form} layout="vertical" onFinish={onSave}>
+        <Row gutter={[16, 16]}>
+          {accts.map((a) => (
+            <Col xs={24} md={12} key={a.key}>
+              <Card size="small" title={<span><KeyOutlined /> {a.label}</span>}>
+                {a.nameWritable && a.nameParam
+                  ? <Form.Item label={<span>Username <Tag color="blue">bisa diganti</Tag></span>} name={'user_' + a.key} initialValue={a.username} style={{ marginBottom: 8 }}
+                      tooltip="Ubah nilai lalu Set untuk mengganti username login. Biarkan sama bila tak ingin ganti.">
+                      <Input placeholder="username login…" />
+                    </Form.Item>
+                  : <Descriptions column={1} size="small" style={{ marginBottom: 8 }}>
+                      <Descriptions.Item label="Username">
+                        {a.username
+                          ? <Space><Typography.Text strong copyable>{a.username}</Typography.Text><Tag color="default">terkunci firmware</Tag></Space>
+                          : <Typography.Text type="secondary">— (klik "Summon dari ONT")</Typography.Text>}
+                      </Descriptions.Item>
+                    </Descriptions>}
+                <Descriptions column={1} size="small" style={{ marginBottom: 8 }}>
+                  <Descriptions.Item label={<span>Password saat ini{a.src ? <Tag color={a.src === 'dari ONT' ? 'blue' : 'green'} style={{ marginInlineStart: 6 }}>{a.src}</Tag> : null}</span>}>
+                    {a.effPw
+                      ? <Input.Password readOnly value={a.effPw} style={{ maxWidth: 240 }} />
+                      : <Typography.Text type="secondary">— ({a.pwReadable ? 'klik Summon' : 'belum ada catatan'})</Typography.Text>}
+                  </Descriptions.Item>
+                </Descriptions>
+                <Form.Item label="Ganti password (opsional)" name={'pw_' + a.key} style={{ marginBottom: 0 }}
+                  tooltip="Kosongkan bila tak ingin mengganti. Mengisi lalu Set akan menulis ke ONT.">
+                  <Input.Password placeholder="kosongkan bila tak ingin ganti…" />
+                </Form.Item>
+              </Card>
+            </Col>
+          ))}
+        </Row>
+        {can('param.edit')
+          ? <Popconfirm title="Ganti kredensial login ONT pelanggan sekarang?" okText="Ya, set" onConfirm={() => form.submit()}>
+              <Button type="primary" icon={<KeyOutlined />} loading={saving} style={{ marginTop: 16 }}>Set Akses (Username &amp; Password)</Button>
+            </Popconfirm>
+          : <Typography.Text type="secondary" style={{ display: 'block', marginTop: 16 }}>Role Anda hanya bisa melihat &amp; summon (tidak berhak set password).</Typography.Text>}
+      </Form>
+      {stored.updatedAt
+        ? <Typography.Text type="secondary" style={{ display: 'block', marginTop: 12, fontSize: 12 }}>Catatan terakhir diubah oleh {stored.updatedBy || '-'}.</Typography.Text>
+        : null}
     </>
   );
 }

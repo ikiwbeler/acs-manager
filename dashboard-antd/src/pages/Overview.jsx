@@ -22,7 +22,34 @@ const DESC = {
     Kritis: 'Suhu kritis — perangkat panas',
     'N/A': 'Data suhu belum tersedia',
   },
+  registrasi: {
+    '24 jam terakhir': 'Terdaftar dalam 24 jam terakhir',
+    '7 hari terakhir': 'Terdaftar 1–7 hari lalu',
+    '30 hari terakhir': 'Terdaftar 8–30 hari lalu',
+    '> 30 hari': 'Terdaftar lebih dari 30 hari lalu',
+    'N/A': 'Tanggal registrasi tak tersedia',
+  },
 };
+
+// Kelompokkan ONU berdasarkan kapan pertama terdaftar (field _registered)
+function regBucket(d) {
+  if (!d.registered) return 'N/A';
+  const days = (Date.now() - new Date(d.registered).getTime()) / 86400000;
+  if (days < 1) return '24 jam terakhir';
+  if (days < 7) return '7 hari terakhir';
+  if (days < 30) return '30 hari terakhir';
+  return '> 30 hari';
+}
+// Selalu tampilkan 4 bucket (walau 0) supaya kategori kosong tetap muncul di legenda
+const REG_ORDER = ['24 jam terakhir', '7 hari terakhir', '30 hari terakhir', '> 30 hari'];
+function regData(devices) {
+  const m = Object.fromEntries(REG_ORDER.map((k) => [k, 0]));
+  let na = 0;
+  devices.forEach((d) => { const k = regBucket(d); if (k in m) m[k]++; else na++; });
+  const out = REG_ORDER.map((type) => ({ type, value: m[type] }));
+  if (na) out.push({ type: 'N/A', value: na });
+  return out;
+}
 
 function countBy(devices, fn) {
   const m = {};
@@ -98,6 +125,7 @@ export default function Overview({ devices, loading }) {
         <Col xs={24} md={12} lg={8}><PieCard title="PON Mode" data={countBy(devices, (d) => d.mode)} onSlice={(t) => openSlice('PON Mode', (d) => d.mode, t)} /></Col>
         <Col xs={24} md={12} lg={8}><PieCard title="Status Redaman (Optical RX)" descMap={DESC.redaman} data={countBy(devices, (d) => d.redaman)} onSlice={(t) => openSlice('Status Redaman', (d) => d.redaman, t)} /></Col>
         <Col xs={24} md={12} lg={8}><PieCard title="Status Suhu" descMap={DESC.suhu} data={countBy(devices, (d) => d.suhu)} onSlice={(t) => openSlice('Status Suhu', (d) => d.suhu, t)} /></Col>
+        <Col xs={24} md={12} lg={8}><PieCard title="Registrasi ONU" descMap={DESC.registrasi} data={regData(devices)} onSlice={(t) => openSlice('Registrasi', regBucket, t)} /></Col>
       </Row>
 
       <Modal
