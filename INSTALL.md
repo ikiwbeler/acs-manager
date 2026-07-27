@@ -60,7 +60,9 @@ Override bila perlu: `ACS_NBI=...` dan `ACS_MONGO_EXEC="..."`.
 > Setiap Virtual Parameter juga harus terdaftar di provision `default` (sudah tercantum di `provisions/default.js`).
 >
 > **Catatan keamanan:** `provisions/inform.js` memakai password ConnectionRequest default `acsmanager`.
-> Ganti nilai ini per-instalasi (nanti otomatis lewat wizard setup pada Fase 2).
+> Ganti nilai ini per-instalasi, lalu seed ulang provision-nya (`python3 seed.py`, atau PUT ke
+> NBI `/provisions/inform`). Belum ada wizard yang menyetelnya otomatis. Perangkat mengadopsi
+> password baru pada inform berikutnya (≤ `informInterval`, default 300s).
 
 Arahkan perangkat ke ACS via **DHCP Option 43** atau konfigurasi OLT: ACS URL = `http://IP-SERVER:7547`.
 
